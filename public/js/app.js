@@ -1,10 +1,13 @@
 // public/js/app.js
 document.addEventListener('click', e => {
-  // Create Event
   if (e.target.matches('#create-event')) {
     e.preventDefault();
     axios.post('/organiser/events/new')
-      .then(r => window.location = `/organiser/events/${r.data.id}/edit`);
+      .then(res => {
+        const eventId = res.data.id;
+        window.location.href = `/organiser/events/${eventId}/edit`; // Instant redirect
+      })
+      .catch(err => console.error(err));
   }
   // Publish
   if (e.target.matches('.publish-btn')) {

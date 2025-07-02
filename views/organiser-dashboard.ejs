@@ -1,0 +1,28 @@
+<%- include('../partials/header', { title: 'Dashboard' }) %>
+
+<div class="max-w-3xl mx-auto py-10">
+  <h1 class="text-3xl font-bold mb-6">Dashboard</h1>
+  <canvas id="bookingChart" width="400" height="200"></canvas>
+</div>
+
+<script>
+  const data = {
+    labels: <%- JSON.stringify(labels) %>,
+    datasets: [{
+      label: 'Tickets Booked',
+      data: <%- JSON.stringify(dataPoints) %>,
+      backgroundColor: ['#60a5fa', '#f472b6', '#34d399', '#facc15'],
+      borderWidth: 1
+    }]
+  };
+  const config = {
+    type: 'pie',
+    data: data,
+    options: { responsive: true }
+  };
+  new Chart(document.getElementById('bookingChart'), config);
+</script>
+
+<%- include('../partials/footer') %>
+<!-- End of file: views/organiser-dashboard.ejs -->
+<!-- This file is part of the Event Manager project, which provides a platform for event organisers and

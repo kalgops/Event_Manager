@@ -135,4 +135,18 @@ router.delete('/events/:id', (req, res, next) => {
   db.run("DELETE FROM events WHERE id=?", [eid], err => err ? next(err) : res.json({ success:true }));
 });
 
+router.get('/dashboard', (req, res, next) => {
+  db.all(
+    `SELECT t.type AS label, SUM(b.qty) AS total
+     FROM bookings b
+     JOIN tickets t ON t.id = b.ticket_id
+     GROUP BY t.type`,
+    (err, rows) => {
+      if (err) return next(err);
+      const labels = rows.map(r => r.label);
+      const dataPoints = rows.map(r => r.total);
+      res.render('organiser-dashboard', { labels, dataPoints });
+    }
+  );
+});
 module.exports = router;
