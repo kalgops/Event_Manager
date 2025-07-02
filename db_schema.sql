@@ -34,7 +34,7 @@ CREATE TABLE tickets (
   FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE
 );
 
--- bookings table — NEWLY FIXED
+-- bookings table
 CREATE TABLE bookings (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   event_id    INTEGER NOT NULL,
@@ -47,10 +47,11 @@ CREATE TABLE bookings (
 );
 
 COMMIT;
+
 -- Add a trigger to update last_modified on events
 CREATE TRIGGER update_event_last_modified
 AFTER UPDATE ON events
 FOR EACH ROW
 BEGIN
   UPDATE events SET last_modified = datetime('now') WHERE id = NEW.id;
-END;  
+END;
