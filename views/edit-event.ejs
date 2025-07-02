@@ -1,0 +1,77 @@
+<%- include('partials/header', { title: event ? `Organiser Edit Event #${event.id}` : 'Edit Event' }) %>
+
+<h1 class="text-2xl font-bold mb-2">Organiser Edit Event Page</h1>
+<% if (event) { %>
+  <p class="text-gray-600 mb-4">
+    Created at: <%= new Date(event.created_at).toLocaleString() %><br/>
+    Last modified: <%= new Date(event.last_modified).toLocaleString() %>
+  </p>
+<% } %>
+
+<% if (errors.length) { %>
+  <div class="mb-4 p-3 bg-red-100 text-red-700 rounded">
+    <ul class="list-disc list-inside">
+      <% errors.forEach(e=>{ %><li><%= e %></li><% }) %>
+    </ul>
+  </div>
+<% } %>
+
+<form action="/organiser/events/<%= event.id %>/edit" method="post" class="space-y-6">
+  <fieldset class="border p-4 rounded space-y-4">
+    <legend class="px-2 font-semibold">Event Details</legend>
+    <div>
+      <label class="block mb-1">Title</label>
+      <input type="text" name="title" value="<%= event.title %>"
+             class="w-full border px-3 py-2 rounded"/>
+    </div>
+    <div>
+      <label class="block mb-1">Description</label>
+      <textarea name="description" class="w-full border px-3 py-2 rounded">
+<%= event.description %></textarea>
+    </div>
+    <div>
+      <label class="block mb-1">Date</label>
+      <input type="date" name="event_date"
+             value="<%= event.event_date ? event.event_date.split('T')[0] : '' %>"
+             class="border px-3 py-2 rounded"/>
+    </div>
+  </fieldset>
+
+  <fieldset class="border p-4 rounded space-y-4">
+    <legend class="px-2 font-semibold">Full-Price Tickets</legend>
+    <div>
+      <label class="block mb-1">Quantity</label>
+      <input type="number" name="fullQty" min="0" value="<%= full.quantity %>"
+             class="w-full border px-3 py-2 rounded"/>
+    </div>
+    <div>
+      <label class="block mb-1">Price</label>
+      <input type="number" step="0.01" name="fullPrice" value="<%= full.price %>"
+             class="w-full border px-3 py-2 rounded"/>
+    </div>
+  </fieldset>
+
+  <fieldset class="border p-4 rounded space-y-4">
+    <legend class="px-2 font-semibold">Concession Tickets</legend>
+    <div>
+      <label class="block mb-1">Quantity</label>
+      <input type="number" name="concQty" min="0" value="<%= conc.quantity %>"
+             class="w-full border px-3 py-2 rounded"/>
+    </div>
+    <div>
+      <label class="block mb-1">Price</label>
+      <input type="number" step="0.01" name="concPrice" value="<%= conc.price %>"
+             class="w-full border px-3 py-2 rounded"/>
+    </div>
+  </fieldset>
+
+  <div class="flex space-x-4">
+    <button type="submit"
+            class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition">
+      Submit Changes
+    </button>
+    <a href="/organiser" class="self-center text-blue-600 hover:underline">&larr; Back to Home</a>
+  </div>
+</form>
+
+<%- include('partials/footer') %>

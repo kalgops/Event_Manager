@@ -1,0 +1,21 @@
+<%- include('partials/header', { title: 'Home' }) %>
+
+<div class="max-w-lg mx-auto py-12 text-center">
+  <h1 class="text-3xl font-bold mb-6">Welcome to Auction Gala Planner</h1>
+  <ul class="space-y-4">
+    <li>
+      <a href="/organiser"
+         class="block px-6 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition">
+        Organiser Home
+      </a>
+    </li>
+    <li>
+      <a href="/attendee"
+         class="block px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition">
+        Attendee Home
+      </a>
+    </li>
+  </ul>
+</div>
+
+<%- include('partials/footer') %>

@@ -1,0 +1,29 @@
+<%- include('partials/header', { title:'Attendee Home' }) %>
+
+<div class="max-w-4xl mx-auto py-8">
+  <h1 class="text-3xl font-bold mb-4">Attendee Home Page</h1>
+
+  <!-- site name & description -->
+  <h2 class="text-2xl font-semibold"><%= settings.name %></h2>
+  <p class="text-gray-600 mb-6"><%= settings.description %></p>
+
+  <% if (events.length === 0) { %>
+    <p class="text-gray-500">No upcoming events at the moment.</p>
+  <% } else { %>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <% events.forEach(ev => { %>
+        <a href="/attendee/events/<%= ev.id %>"
+           class="block p-6 bg-white rounded-lg shadow hover:shadow-lg transition">
+          <h3 class="text-xl font-semibold mb-2"><%= ev.title %></h3>
+          <p class="text-gray-500">
+            <%= new Date(ev.event_date).toLocaleDateString(undefined, {
+                  year:'numeric', month:'short', day:'numeric'
+                }) %>
+          </p>
+        </a>
+      <% }) %>
+    </div>
+  <% } %>
+</div>
+
+<%- include('partials/footer') %>

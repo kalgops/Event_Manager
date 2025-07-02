@@ -1,0 +1,94 @@
+<%- include('partials/header', { title:'Organiser Home' }) %>
+
+<h1 class="text-3xl font-bold mb-4">Organiser Home Page</h1>
+<h2 class="text-2xl font-semibold"><%= settings.name %></h2>
+<p class="text-gray-600 mb-6"><%= settings.description %></p>
+
+<div class="flex space-x-4 mb-6">
+  <a href="/organiser/settings"
+     class="px-4 py-2 bg-yellow-400 text-white rounded hover:bg-yellow-500 transition">
+    Site Settings
+  </a>
+  <button id="create-event"
+          class="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition">
+    Create New Event
+  </button>
+</div>
+
+<div class="md:flex md:space-x-6">
+  <!-- Published -->
+  <section class="md:w-1/2 mb-8 md:mb-0">
+    <h3 class="text-xl font-semibold mb-3">Published Events</h3>
+    <% if (published.length === 0) { %>
+      <p class="text-gray-500">None yet.</p>
+    <% } else { %>
+      <ul class="space-y-4">
+        <% published.forEach(e => { %>
+          <li class="p-4 bg-white shadow rounded flex justify-between items-center">
+            <div>
+              <div class="font-bold text-lg"><%= e.title %></div>
+              <div class="text-sm text-gray-500">
+                <%= new Date(e.event_date).toLocaleDateString() %>
+                &nbsp;|&nbsp;
+                <span class="font-medium"><%= e.remaining %></span> tickets left
+              </div>
+            </div>
+            <div class="space-x-2">
+              <button data-id="<%= e.id %>"
+                      class="publish-btn px-2 py-1 bg-blue-100 text-blue-700 rounded transition">
+                Republish
+              </button>
+              <button data-id="<%= e.id %>"
+                      class="delete-btn px-2 py-1 bg-red-100 text-red-700 rounded transition">
+                Delete
+              </button>
+              <a href="/organiser/events/<%= e.id %>/edit"
+                 class="px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded transition">
+                Edit
+              </a>
+            </div>
+          </li>
+        <% }) %>
+      </ul>
+    <% } %>
+  </section>
+
+  <!-- Drafts -->
+  <section class="md:w-1/2">
+    <h3 class="text-xl font-semibold mb-3">Draft Events</h3>
+    <% if (drafts.length === 0) { %>
+      <p class="text-gray-500">None yet.</p>
+    <% } else { %>
+      <ul class="space-y-4">
+        <% drafts.forEach(e => { %>
+          <li class="p-4 bg-white shadow rounded flex justify-between items-center">
+            <div>
+              <div class="font-bold"><%= e.title || 'Untitled' %></div>
+              <div class="text-sm text-gray-500">
+                Created: <%= new Date(e.created_at).toLocaleDateString() %>
+                &nbsp;|&nbsp;
+                <span class="font-medium"><%= e.remaining %></span> tickets left
+              </div>
+            </div>
+            <div class="space-x-2">
+              <button data-id="<%= e.id %>"
+                      class="publish-btn px-2 py-1 bg-blue-100 text-blue-700 rounded transition">
+                Publish
+              </button>
+              <button data-id="<%= e.id %>"
+                      class="delete-btn px-2 py-1 bg-red-100 text-red-700 rounded transition">
+                Delete
+              </button>
+              <a href="/organiser/events/<%= e.id %>/edit"
+                 class="px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded transition">
+                Edit
+              </a>
+            </div>
+          </li>
+        <% }) %>
+      </ul>
+    <% } %>
+  </section>
+</div>
+
+<%- include('partials/footer') %>

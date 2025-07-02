@@ -1,0 +1,28 @@
+<!DOCTYPE html><html><head>
+  <link rel="stylesheet" href="/main.css">
+  <title>Edit Auction</title>
+</head><body>
+  <h1>Edit Auction #<%= auction.id %></h1>
+  <form action="/organiser/auctions/<%= auction.id %>" method="post">
+    <p>Title: <input name="title" value="<%= auction.title %>" required></p>
+    <p>Description: <textarea name="description"><%= auction.description %></textarea></p>
+    <p>Start: <input type="datetime-local" name="start_time" value="<%= auction.start_time %>"></p>
+    <p>End:   <input type="datetime-local" name="end_time" value="<%= auction.end_time %>"></p>
+    <button>Save</button>
+  </form>
+  <h2>Items</h2>
+  <table><tr><th>Name</th><th>Reserve</th><th>Starting</th></tr>
+    <% items.forEach(i=>{ %>
+      <tr><td><%=i.name%></td><td><%=i.reserve_price%></td><td><%=i.starting_bid%></td></tr>
+    <% }) %>
+  </table>
+  <h3>Add Item</h3>
+  <form action="/organiser/auctions/<%= auction.id %>/items" method="post">
+    <p>Name:<input name="name" required></p>
+    <p>Description:<textarea name="description"></textarea></p>
+    <p>Starting Bid:<input type="number" step="0.01" name="starting_bid" required></p>
+    <p>Reserve Price:<input type="number" step="0.01" name="reserve_price" required></p>
+    <button>Add</button>
+  </form>
+  <a href="/organiser">← Back</a>
+</body></html>

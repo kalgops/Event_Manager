@@ -1,0 +1,11 @@
+<!DOCTYPE html><html><head>
+  <link rel="stylesheet" href="/main.css">
+  <title>Auctions</title>
+</head><body>
+  <h1>Available Auctions</h1>
+  <ul>
+    <% auctions.forEach(a=>{ %>
+      <li><a href="/attendee/auctions/<%=a.id%>"><%=a.title%> — <%=a.start_time%></a></li>
+    <% }) %>
+  </ul>
+</body></html>
