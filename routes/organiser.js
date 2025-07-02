@@ -57,7 +57,7 @@ router.post('/events/new', (req, res, next) => {
   });
 });
 
-// GET /organiser/events/:id/edit - MISSING ROUTE ADDED
+// GET /organiser/events/:id/edit
 router.get('/events/:id/edit', (req, res, next) => {
   const eventId = req.params.id;
   
@@ -172,20 +172,111 @@ router.get('/bookings', (req, res, next) => {
   });
 });
 
-// GET /organiser/dashboard
+// GET /organiser/dashboard — Enhanced Analytics Dashboard
 router.get('/dashboard', (req, res, next) => {
-  db.all(
-    `SELECT t.type AS label, SUM(b.qty) AS total
-     FROM bookings b
-     JOIN tickets t ON t.id = b.ticket_id
-     GROUP BY t.type`,
-    (err, rows) => {
+  // Get multiple analytics data sets
+  const queries = {
+    // Ticket sales by type
+    ticketSales: `
+      SELECT t.type AS label, 
+             SUM(b.qty) AS total,
+             SUM(b.qty * t.price) AS revenue
+      FROM bookings b
+      JOIN tickets t ON t.id = b.ticket_id
+      GROUP BY t.type
+    `,
+    
+    // Event popularity (bookings per event)
+    eventPopularity: `
+      SELECT e.title AS label, 
+             COUNT(b.id) AS bookings,
+             SUM(b.qty) AS total_tickets
+      FROM events e
+      LEFT JOIN bookings b ON e.id = b.event_id
+      WHERE e.state = 'published'
+      GROUP BY e.id, e.title
+      ORDER BY total_tickets DESC
+    `,
+    
+    // Booking trends over time (last 30 days)
+    bookingTrends: `
+      SELECT DATE(b.booked_at) AS booking_date,
+             COUNT(b.id) AS bookings,
+             SUM(b.qty) AS tickets_sold
+      FROM bookings b
+      WHERE datetime(b.booked_at) >= datetime('now', '-30 days')
+      GROUP BY DATE(b.booked_at)
+      ORDER BY booking_date ASC
+    `,
+    
+    // Capacity utilization
+    capacityUtilization: `
+      SELECT 
+        e.title,
+        SUM(t.quantity) as total_capacity,
+        COALESCE(SUM(b.qty), 0) as tickets_sold,
+        CASE 
+          WHEN SUM(t.quantity) > 0 
+          THEN ROUND((COALESCE(SUM(b.qty), 0) * 100.0 / SUM(t.quantity)), 2)
+          ELSE 0 
+        END as utilization_percent
+      FROM events e
+      JOIN tickets t ON e.id = t.event_id
+      LEFT JOIN bookings b ON t.id = b.ticket_id
+      WHERE e.state = 'published'
+      GROUP BY e.id, e.title
+    `,
+    
+    // Revenue breakdown
+    revenueBreakdown: `
+      SELECT 
+        e.title AS event_name,
+        t.type AS ticket_type,
+        SUM(b.qty) AS tickets_sold,
+        t.price,
+        SUM(b.qty * t.price) AS revenue
+      FROM events e
+      JOIN tickets t ON e.id = t.event_id
+      LEFT JOIN bookings b ON t.id = b.ticket_id
+      WHERE e.state = 'published'
+      GROUP BY e.id, e.title, t.type, t.price
+      HAVING tickets_sold > 0
+      ORDER BY revenue DESC
+    `
+  };
+
+  let completedQueries = 0;
+  const results = {};
+  const totalQueries = Object.keys(queries).length;
+
+  // Execute all queries
+  Object.entries(queries).forEach(([key, query]) => {
+    db.all(query, (err, rows) => {
       if (err) return next(err);
-      const labels = rows.map(r => r.label);
-      const dataPoints = rows.map(r => r.total);
-      res.render('organiser-dashboard', { labels, dataPoints });
-    }
-  );
+      
+      results[key] = rows || [];
+      completedQueries++;
+      
+      if (completedQueries === totalQueries) {
+        // Calculate summary statistics
+        const totalBookings = results.ticketSales.reduce((sum, item) => sum + item.total, 0);
+        const totalRevenue = results.ticketSales.reduce((sum, item) => sum + item.revenue, 0);
+        const avgUtilization = results.capacityUtilization.length > 0 
+          ? results.capacityUtilization.reduce((sum, item) => sum + item.utilization_percent, 0) / results.capacityUtilization.length
+          : 0;
+
+        res.render('organiser-dashboard', {
+          ...results,
+          summary: {
+            totalBookings,
+            totalRevenue,
+            avgUtilization: Math.round(avgUtilization * 100) / 100,
+            totalEvents: results.eventPopularity.length
+          }
+        });
+      }
+    });
+  });
 });
 
 module.exports = router;
