@@ -51,9 +51,109 @@ router.post('/events/new', (req, res, next) => {
   db.run("INSERT INTO events(state) VALUES('draft')", function(err) {
     if (err) return next(err);
     const newId = this.lastID;
-    if (req.xhr) return res.json({ id: newId });
-    res.redirect(`/organiser/events/${newId}/edit`);
+    
+    // Always return JSON for async handling
+    res.json({ id: newId, success: true });
   });
+});
+
+// GET /organiser/events/:id/edit - MISSING ROUTE ADDED
+router.get('/events/:id/edit', (req, res, next) => {
+  const eventId = req.params.id;
+  
+  // Load the event
+  db.get('SELECT * FROM events WHERE id = ?', [eventId], (err, event) => {
+    if (err) return next(err);
+    if (!event) return res.status(404).render('404');
+    
+    // Load ticket data
+    db.all('SELECT * FROM tickets WHERE event_id = ?', [eventId], (err2, tickets) => {
+      if (err2) return next(err2);
+      
+      // Organize tickets by type
+      const full = tickets.find(t => t.type === 'full') || { quantity: 0, price: 0 };
+      const conc = tickets.find(t => t.type === 'concession') || { quantity: 0, price: 0 };
+      
+      res.render('edit-event', {
+        event,
+        full,
+        conc,
+        errors: []
+      });
+    });
+  });
+});
+
+// POST /organiser/events/:id/edit
+router.post('/events/:id/edit', (req, res, next) => {
+  const eid = req.params.id;
+  const { title, description, event_date, fullQty, fullPrice, concQty, concPrice } = req.body;
+  const errors = [];
+  if (!title || !title.trim())       errors.push('Title required');
+  if (!description || !description.trim()) errors.push('Description required');
+  if (!event_date)         errors.push('Date required');
+
+  if (errors.length) {
+    return res.render('edit-event', {
+      event: { id: eid, title, description, event_date, created_at: '', last_modified: '' },
+      full: { quantity: fullQty || 0, price: fullPrice || 0 },
+      conc: { quantity: concQty || 0, price: concPrice || 0 },
+      errors
+    });
+  }
+
+  db.run(
+    `UPDATE events
+     SET title=?, description=?, event_date=?, last_modified=datetime('now')
+     WHERE id=?`,
+    [title, description, event_date, eid],
+    err => {
+      if (err) return next(err);
+
+      const upsert = (type, qty, price, callback) => {
+        db.get("SELECT id FROM tickets WHERE event_id=? AND type=?", [eid, type], (e, r) => {
+          if (e) return callback(e);
+          if (r) {
+            db.run("UPDATE tickets SET quantity=?,price=? WHERE id=?", [qty, price, r.id], callback);
+          } else {
+            db.run("INSERT INTO tickets(event_id,type,quantity,price) VALUES(?,?,?,?)",
+                   [eid, type, qty, price], callback);
+          }
+        });
+      };
+
+      // Use async operations to handle both ticket types
+      let completed = 0;
+      const total = 2;
+      
+      const checkComplete = (err) => {
+        if (err) return next(err);
+        completed++;
+        if (completed === total) {
+          res.redirect('/organiser');
+        }
+      };
+
+      upsert('full', fullQty || 0, fullPrice || 0, checkComplete);
+      upsert('concession', concQty || 0, concPrice || 0, checkComplete);
+    }
+  );
+});
+
+// POST /organiser/events/:id/publish
+router.post('/events/:id/publish', (req, res, next) => {
+  const eid = req.params.id;
+  db.run(
+    "UPDATE events SET state='published', published_at=datetime('now') WHERE id=?",
+    [eid],
+    err => err ? next(err) : res.json({ success: true })
+  );
+});
+
+// DELETE /organiser/events/:id
+router.delete('/events/:id', (req, res, next) => {
+  const eid = req.params.id;
+  db.run("DELETE FROM events WHERE id=?", [eid], err => err ? next(err) : res.json({ success: true }));
 });
 
 // GET /organiser/bookings — View all bookings
@@ -72,69 +172,7 @@ router.get('/bookings', (req, res, next) => {
   });
 });
 
-
-// POST /organiser/events/:id/edit
-router.post('/events/:id/edit', (req, res, next) => {
-  const eid = req.params.id;
-  const { title, description, event_date, fullQty, fullPrice, concQty, concPrice } = req.body;
-  const errors = [];
-  if (!title.trim())       errors.push('Title required');
-  if (!description.trim()) errors.push('Description required');
-  if (!event_date)         errors.push('Date required');
-
-  if (errors.length) {
-    return res.render('edit-event', {
-      event: { id: eid, title, description, event_date, created_at: '', last_modified: '' },
-      full: { quantity: fullQty, price: fullPrice },
-      conc: { quantity: concQty, price: concPrice },
-      errors
-    });
-  }
-
-  db.run(
-    `UPDATE events
-     SET title=?, description=?, event_date=?, last_modified=datetime('now')
-     WHERE id=?`,
-    [title, description, event_date, eid],
-    err => {
-      if (err) return next(err);
-
-      const upsert = (type, qty, price) => {
-        db.get("SELECT id FROM tickets WHERE event_id=? AND type=?", [eid,type], (e,r) => {
-          if (e) return next(e);
-          if (r) {
-            db.run("UPDATE tickets SET quantity=?,price=? WHERE id=?", [qty,price,r.id]);
-          } else {
-            db.run("INSERT INTO tickets(event_id,type,quantity,price) VALUES(?,?,?,?)",
-                   [eid,type,qty,price]);
-          }
-        });
-      };
-
-      upsert('full',       fullQty,  fullPrice);
-      upsert('concession', concQty,  concPrice);
-
-      res.redirect('/organiser');
-    }
-  );
-});
-
-// POST /organiser/events/:id/publish
-router.post('/events/:id/publish', (req, res, next) => {
-  const eid = req.params.id;
-  db.run(
-    "UPDATE events SET state='published', published_at=datetime('now') WHERE id=?",
-    [eid],
-    err => err ? next(err) : res.json({ success:true })
-  );
-});
-
-// DELETE /organiser/events/:id
-router.delete('/events/:id', (req, res, next) => {
-  const eid = req.params.id;
-  db.run("DELETE FROM events WHERE id=?", [eid], err => err ? next(err) : res.json({ success:true }));
-});
-
+// GET /organiser/dashboard
 router.get('/dashboard', (req, res, next) => {
   db.all(
     `SELECT t.type AS label, SUM(b.qty) AS total
@@ -149,4 +187,5 @@ router.get('/dashboard', (req, res, next) => {
     }
   );
 });
+
 module.exports = router;

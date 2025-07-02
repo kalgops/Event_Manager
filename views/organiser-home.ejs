@@ -13,6 +13,10 @@
           class="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition">
     Create New Event
   </button>
+  <a href="/organiser/bookings"
+     class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition">
+    View All Bookings
+  </a>
 </div>
 
 <div class="md:flex md:space-x-6">
@@ -28,24 +32,29 @@
             <div>
               <div class="font-bold text-lg"><%= e.title %></div>
               <div class="text-sm text-gray-500">
-                <%= new Date(e.event_date).toLocaleDateString() %>
-                &nbsp;|&nbsp;
-                <span class="font-medium"><%= e.remaining %></span> tickets left
+                <% if (e.event_date) { %>
+                  <%= new Date(e.event_date).toLocaleDateString() %>
+                <% } else { %>
+                  No date set
+                <% } %>
+                <% if (e.published_at) { %>
+                  &nbsp;|&nbsp; Published: <%= new Date(e.published_at).toLocaleDateString() %>
+                <% } %>
               </div>
             </div>
-            <div class="space-x-2">
+            <div class="space-x-2 flex">
               <button data-id="<%= e.id %>"
-                      class="publish-btn px-2 py-1 bg-blue-100 text-blue-700 rounded transition">
+                      class="publish-btn px-3 py-1 bg-blue-100 text-blue-700 text-sm rounded hover:bg-blue-200 transition">
                 Republish
               </button>
-              <button data-id="<%= e.id %>"
-                      class="delete-btn px-2 py-1 bg-red-100 text-red-700 rounded transition">
-                Delete
-              </button>
               <a href="/organiser/events/<%= e.id %>/edit"
-                 class="px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded transition">
+                 class="px-3 py-1 bg-gray-100 hover:bg-gray-200 text-sm rounded transition">
                 Edit
               </a>
+              <button data-id="<%= e.id %>"
+                      class="delete-btn px-3 py-1 bg-red-100 text-red-700 text-sm rounded hover:bg-red-200 transition">
+                Delete
+              </button>
             </div>
           </li>
         <% }) %>
@@ -63,26 +72,27 @@
         <% drafts.forEach(e => { %>
           <li class="p-4 bg-white shadow rounded flex justify-between items-center">
             <div>
-              <div class="font-bold"><%= e.title || 'Untitled' %></div>
+              <div class="font-bold"><%= e.title || 'Untitled Event' %></div>
               <div class="text-sm text-gray-500">
                 Created: <%= new Date(e.created_at).toLocaleDateString() %>
-                &nbsp;|&nbsp;
-                <span class="font-medium"><%= e.remaining %></span> tickets left
+                <% if (e.last_modified && e.last_modified !== e.created_at) { %>
+                  &nbsp;|&nbsp; Modified: <%= new Date(e.last_modified).toLocaleDateString() %>
+                <% } %>
               </div>
             </div>
-            <div class="space-x-2">
+            <div class="space-x-2 flex">
               <button data-id="<%= e.id %>"
-                      class="publish-btn px-2 py-1 bg-blue-100 text-blue-700 rounded transition">
+                      class="publish-btn px-3 py-1 bg-blue-100 text-blue-700 text-sm rounded hover:bg-blue-200 transition">
                 Publish
               </button>
-              <button data-id="<%= e.id %>"
-                      class="delete-btn px-2 py-1 bg-red-100 text-red-700 rounded transition">
-                Delete
-              </button>
               <a href="/organiser/events/<%= e.id %>/edit"
-                 class="px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded transition">
+                 class="px-3 py-1 bg-gray-100 hover:bg-gray-200 text-sm rounded transition">
                 Edit
               </a>
+              <button data-id="<%= e.id %>"
+                      class="delete-btn px-3 py-1 bg-red-100 text-red-700 text-sm rounded hover:bg-red-200 transition">
+                Delete
+              </button>
             </div>
           </li>
         <% }) %>
