@@ -2,8 +2,12 @@
 
 <h1 class="text-3xl font-bold mb-4">All Bookings</h1>
 
+<div class="mb-8">
+  <canvas id="bookingsChart" width="400" height="200"></canvas>
+</div>
+
 <% if (bookings.length === 0) { %>
-  <p class="text-gray-500">No bookings yet.</p>
+  <p class="text-gray-500">No bookings have been made yet.</p>
 <% } else { %>
   <div class="overflow-x-auto">
     <table class="min-w-full bg-white shadow rounded">
