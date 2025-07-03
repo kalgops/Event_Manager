@@ -16,7 +16,13 @@ router.get('/', (req, res, next) => {
       if (e2) return next(e2);
       db.all("SELECT * FROM events WHERE state='draft' ORDER BY created_at DESC", (e3, drafts) => {
         if (e3) return next(e3);
-        res.render('organiser-home', { settings, published, drafts });
+        res.render('organiser-home', { 
+          settings, 
+          published, 
+          drafts,
+          success: req.query.success,
+          error: req.query.error
+        });
       });
     });
   });
@@ -42,7 +48,7 @@ router.post('/settings', (req, res, next) => {
   db.run(
     "UPDATE site_settings SET name=?, description=? WHERE id=1",
     [name, description],
-    err => err ? next(err) : res.redirect('/organiser')
+    err => err ? next(err) : res.redirect('/organiser?success=Settings updated successfully')
   );
 });
 
@@ -51,8 +57,6 @@ router.post('/events/new', (req, res, next) => {
   db.run("INSERT INTO events(state) VALUES('draft')", function(err) {
     if (err) return next(err);
     const newId = this.lastID;
-    
-    // Always return JSON for async handling
     res.json({ id: newId, success: true });
   });
 });
@@ -61,16 +65,13 @@ router.post('/events/new', (req, res, next) => {
 router.get('/events/:id/edit', (req, res, next) => {
   const eventId = req.params.id;
   
-  // Load the event
   db.get('SELECT * FROM events WHERE id = ?', [eventId], (err, event) => {
     if (err) return next(err);
     if (!event) return res.status(404).render('404');
     
-    // Load ticket data
     db.all('SELECT * FROM tickets WHERE event_id = ?', [eventId], (err2, tickets) => {
       if (err2) return next(err2);
       
-      // Organize tickets by type
       const full = tickets.find(t => t.type === 'full') || { quantity: 0, price: 0 };
       const conc = tickets.find(t => t.type === 'concession') || { quantity: 0, price: 0 };
       
@@ -78,7 +79,9 @@ router.get('/events/:id/edit', (req, res, next) => {
         event,
         full,
         conc,
-        errors: []
+        errors: [],
+        success: req.query.success,
+        error: req.query.error
       });
     });
   });
@@ -89,6 +92,7 @@ router.post('/events/:id/edit', (req, res, next) => {
   const eid = req.params.id;
   const { title, description, event_date, fullQty, fullPrice, concQty, concPrice } = req.body;
   const errors = [];
+  
   if (!title || !title.trim())       errors.push('Title required');
   if (!description || !description.trim()) errors.push('Description required');
   if (!event_date)         errors.push('Date required');
@@ -122,7 +126,6 @@ router.post('/events/:id/edit', (req, res, next) => {
         });
       };
 
-      // Use async operations to handle both ticket types
       let completed = 0;
       const total = 2;
       
@@ -130,7 +133,7 @@ router.post('/events/:id/edit', (req, res, next) => {
         if (err) return next(err);
         completed++;
         if (completed === total) {
-          res.redirect('/organiser');
+          res.redirect(`/organiser/events/${eid}/edit?success=Event updated successfully`);
         }
       };
 
@@ -161,7 +164,9 @@ router.get('/bookings', (req, res, next) => {
   db.all(`
     SELECT b.id, b.buyer_name, b.qty, b.booked_at,
            e.title AS event_title,
-           t.type  AS ticket_type
+           t.type  AS ticket_type,
+           t.price,
+           (b.qty * t.price) AS total_cost
     FROM bookings b
     JOIN events  e ON b.event_id  = e.id
     JOIN tickets t ON b.ticket_id = t.id
@@ -174,9 +179,7 @@ router.get('/bookings', (req, res, next) => {
 
 // GET /organiser/dashboard — Enhanced Analytics Dashboard
 router.get('/dashboard', (req, res, next) => {
-  // Get multiple analytics data sets
   const queries = {
-    // Ticket sales by type
     ticketSales: `
       SELECT t.type AS label, 
              SUM(b.qty) AS total,
@@ -186,7 +189,6 @@ router.get('/dashboard', (req, res, next) => {
       GROUP BY t.type
     `,
     
-    // Event popularity (bookings per event)
     eventPopularity: `
       SELECT e.title AS label, 
              COUNT(b.id) AS bookings,
@@ -198,7 +200,6 @@ router.get('/dashboard', (req, res, next) => {
       ORDER BY total_tickets DESC
     `,
     
-    // Booking trends over time (last 30 days)
     bookingTrends: `
       SELECT DATE(b.booked_at) AS booking_date,
              COUNT(b.id) AS bookings,
@@ -209,7 +210,6 @@ router.get('/dashboard', (req, res, next) => {
       ORDER BY booking_date ASC
     `,
     
-    // Capacity utilization
     capacityUtilization: `
       SELECT 
         e.title,
@@ -227,7 +227,6 @@ router.get('/dashboard', (req, res, next) => {
       GROUP BY e.id, e.title
     `,
     
-    // Revenue breakdown
     revenueBreakdown: `
       SELECT 
         e.title AS event_name,
@@ -249,7 +248,6 @@ router.get('/dashboard', (req, res, next) => {
   const results = {};
   const totalQueries = Object.keys(queries).length;
 
-  // Execute all queries
   Object.entries(queries).forEach(([key, query]) => {
     db.all(query, (err, rows) => {
       if (err) return next(err);
@@ -258,7 +256,6 @@ router.get('/dashboard', (req, res, next) => {
       completedQueries++;
       
       if (completedQueries === totalQueries) {
-        // Calculate summary statistics
         const totalBookings = results.ticketSales.reduce((sum, item) => sum + item.total, 0);
         const totalRevenue = results.ticketSales.reduce((sum, item) => sum + item.revenue, 0);
         const avgUtilization = results.capacityUtilization.length > 0 
