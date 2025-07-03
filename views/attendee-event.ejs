@@ -1,79 +1,173 @@
-<%- include('partials/header', { title: `Book: ${event.title}` }) %>
+<%- include('partials/header', { title: 'Attendee Event Page' }) %>
 
-<div class="max-w-3xl mx-auto py-8">
-  <h1 class="text-3xl font-bold mb-4">Attend: <%= event.title %></h1>
-  <p class="text-gray-700 mb-6"><%= event.description %></p>
-  <p class="mb-6"><strong>Date:</strong> <%= new Date(event.event_date).toLocaleDateString() %></p>
-
-  <!-- Display server-side validation errors -->
-  <% if (errors.length) { %>
-    <ul class="mb-4 text-red-600 list-disc list-inside">
-      <% errors.forEach(e => { %>
-        <li><%= e.msg %></li>
-      <% }) %>
-    </ul>
-  <% } %>
-
-  <form id="booking-form" action="/attendee/events/<%= event.id %>/book" method="post">
-    <div class="mb-4">
-      <label class="block font-medium mb-1" for="name">Your Name</label>
-      <input
-        type="text" name="name" id="name"
-        value="<%= formData.name||'' %>"
-        class="w-full border rounded px-3 py-2"
-        required
-      />
+<div class="container">
+  <h1>Attendee Event Page</h1>
+  
+  <!-- Event Information -->
+  <div class="event-details-header">
+    <h2><%= event.title %></h2>
+    <div class="event-meta">
+      <p class="event-date">
+        <strong>📅 Date:</strong> 
+        <%= event.event_date ? new Date(event.event_date).toLocaleDateString('en-GB', {
+          weekday: 'long',
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric'
+        }) : 'Date TBA' %>
+      </p>
     </div>
-
-    <fieldset class="mb-6 space-y-4">
-      <legend class="font-semibold">Select Tickets</legend>
-      <% tickets.forEach(t => { %>
-        <div class="flex items-center space-x-4">
-          <div class="w-1/3">
-            <p class="font-medium"><%= t.type.charAt(0).toUpperCase() + t.type.slice(1) %></p>
-            <p class="text-sm text-gray-500">$<%= t.price.toFixed(2) %> each</p>
-            <p class="text-sm text-gray-400">Remaining: <%= t.quantity %></p>
-          </div>
-          <div class="w-1/3">
-            <label class="block text-sm mb-1">Quantity</label>
-            <input
-              type="number"
-              name="tickets[<%= t.id %>][quantity]"
-              min="0" max="<%= t.quantity %>"
-              value="<%= (formData['tickets['+t.id+'][quantity]']||0) %>"
-              class="w-full border rounded px-2 py-1"
-            />
-          </div>
-        </div>
+    <div class="event-description">
+      <p><%= event.description %></p>
+    </div>
+  </div>
+  
+  <!-- Display errors if any -->
+  <% if (errors.length > 0) { %>
+    <div class="error-messages">
+      <% errors.forEach(error => { %>
+        <div class="error"><%= error.msg || error %></div>
       <% }) %>
-    </fieldset>
-
-    <button
-      type="submit"
-      class="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 transition"
-    >
-      Book&nbsp;Now
-    </button>
-    <a href="/attendee" class="ml-4 text-gray-600 hover:underline">← Back</a>
-  </form>
+    </div>
+  <% } %>
+  
+  <!-- Ticket Information and Booking Form -->
+  <% if (tickets.length === 0) { %>
+    <div class="no-tickets">
+      <p>No tickets are available for this event.</p>
+    </div>
+  <% } else { %>
+    <div class="booking-section">
+      <h3>Available Tickets</h3>
+      
+      <!-- Display ticket types and prices -->
+      <div class="ticket-info">
+        <% tickets.forEach(ticket => { %>
+          <div class="ticket-type-info">
+            <h4>
+              <%= ticket.type === 'full' ? 'Full Price' : 'Concession' %> Tickets
+            </h4>
+            <p class="ticket-price">£<%= ticket.price.toFixed(2) %> each</p>
+            <p class="ticket-availability">
+              Available: <%= ticket.remaining %> of <%= ticket.quantity %>
+              <% if (ticket.remaining === 0) { %>
+                <span class="sold-out">(SOLD OUT)</span>
+              <% } %>
+            </p>
+          </div>
+        <% }) %>
+      </div>
+      
+      <!-- Booking Form -->
+      <form method="post" action="/attendee/events/<%= event.id %>/book" class="booking-form">
+        <h4>Book Your Tickets</h4>
+        
+        <div class="form-group">
+          <label for="buyer_name">Your Name:</label>
+          <input 
+            type="text" 
+            id="buyer_name" 
+            name="buyer_name" 
+            value="<%= typeof formData !== 'undefined' ? formData.buyer_name || '' : '' %>" 
+            required
+            placeholder="Enter your full name"
+          >
+        </div>
+        
+        <!-- Ticket Selection -->
+        <div class="ticket-selection">
+          <h5>Select Number of Tickets:</h5>
+          
+          <% tickets.forEach(ticket => { %>
+            <% if (ticket.remaining > 0) { %>
+              <div class="ticket-select-group">
+                <label for="<%= ticket.type %>_quantity">
+                  <%= ticket.type === 'full' ? 'Full Price' : 'Concession' %> 
+                  (£<%= ticket.price.toFixed(2) %> each):
+                </label>
+                <select 
+                  id="<%= ticket.type %>_quantity" 
+                  name="<%= ticket.type %>_quantity"
+                  class="ticket-quantity-select"
+                >
+                  <% for (let i = 0; i <= Math.min(ticket.remaining, 10); i++) { %>
+                    <option value="<%= i %>" 
+                      <%= (typeof formData !== 'undefined' && formData[ticket.type + '_quantity'] == i) ? 'selected' : '' %>
+                      <%= i === 0 ? 'selected' : '' %>
+                    >
+                      <%= i %>
+                    </option>
+                  <% } %>
+                </select>
+                <span class="max-available">(Max: <%= ticket.remaining %>)</span>
+              </div>
+            <% } else { %>
+              <div class="ticket-select-group sold-out">
+                <label>
+                  <%= ticket.type === 'full' ? 'Full Price' : 'Concession' %> 
+                  (£<%= ticket.price.toFixed(2) %> each):
+                </label>
+                <span class="sold-out-text">SOLD OUT</span>
+                <input type="hidden" name="<%= ticket.type %>_quantity" value="0">
+              </div>
+            <% } %>
+          <% }) %>
+        </div>
+        
+        <!-- Book Button -->
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary btn-large">Book Now</button>
+        </div>
+      </form>
+    </div>
+  <% } %>
+  
+  <!-- Back Button -->
+  <div class="back-action">
+    <a href="/attendee" class="btn btn-secondary">← Back to Attendee Home</a>
+  </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
 <script>
-// Example: hijack form and submit via Axios for smoother UX
-document.getElementById('booking-form').addEventListener('submit', function(e) {
-  e.preventDefault();
-  const form = e.target;
-  const data = new FormData(form);
-  axios.post(form.action, data)
-    .then(resp => {
-      // on success redirect
-      window.location.href = '/attendee?booked=1';
-    })
-    .catch(err => {
-      // on error, reload to show server-side messages
-      window.location.reload();
+// Simple JavaScript to calculate total price
+document.addEventListener('DOMContentLoaded', function() {
+  const quantitySelects = document.querySelectorAll('.ticket-quantity-select');
+  
+  function updateTotal() {
+    let total = 0;
+    let totalTickets = 0;
+    
+    quantitySelects.forEach(select => {
+      const quantity = parseInt(select.value) || 0;
+      const priceMatch = select.closest('.ticket-select-group').querySelector('label').textContent.match(/£([\d.]+)/);
+      if (priceMatch) {
+        const price = parseFloat(priceMatch[1]);
+        total += quantity * price;
+        totalTickets += quantity;
+      }
     });
+    
+    // Update or create total display
+    let totalDisplay = document.querySelector('.total-display');
+    if (!totalDisplay) {
+      totalDisplay = document.createElement('div');
+      totalDisplay.className = 'total-display';
+      document.querySelector('.form-actions').before(totalDisplay);
+    }
+    
+    if (totalTickets > 0) {
+      totalDisplay.innerHTML = `<strong>Total: ${totalTickets} ticket${totalTickets > 1 ? 's' : ''} - £${total.toFixed(2)}</strong>`;
+      totalDisplay.style.display = 'block';
+    } else {
+      totalDisplay.style.display = 'none';
+    }
+  }
+  
+  quantitySelects.forEach(select => {
+    select.addEventListener('change', updateTotal);
+  });
+  
+  updateTotal(); // Initial calculation
 });
 </script>
 

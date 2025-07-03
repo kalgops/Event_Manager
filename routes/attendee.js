@@ -1,255 +1,199 @@
-// routes/attendee.js
-const express = require('express');
-const router  = express.Router();
-const db      = global.db;
+// routes/attendee.js - Attendee-side routes for viewing and booking events
+// Handles event listing, event details, and ticket booking
 
-// Helper to load site settings
-function loadSettings(cb) {
-  db.get('SELECT name, description FROM site_settings WHERE id=1', cb);
+const express = require('express');
+const { body, validationResult } = require('express-validator');
+const router = express.Router();
+const db = global.db;
+
+// Helper function to load site settings
+// Input: Callback function
+// Output: Site settings object {name, description}
+function loadSettings(callback) {
+  db.get('SELECT name, description FROM site_settings WHERE id = 1', callback);
 }
 
-// GET /attendee — main attendee page showing all published events
+// GET /attendee - Attendee home page with list of published events
+// Input: None
+// Output: Renders attendee home with published events ordered by date
 router.get('/', (req, res, next) => {
-  loadSettings((e1, settings) => {
-    if (e1) return next(e1);
+  loadSettings((err1, settings) => {
+    if (err1) return next(err1);
     
+    // Get all published events ordered by event date
     db.all(`
-      SELECT e.*, 
-             t1.quantity as full_quantity, t1.price as full_price,
-             t2.quantity as conc_quantity, t2.price as conc_price,
-             COALESCE(b1.sold_full, 0) as sold_full,
-             COALESCE(b2.sold_conc, 0) as sold_conc
+      SELECT e.id, e.title, e.description, e.event_date
       FROM events e
-      LEFT JOIN tickets t1 ON e.id = t1.event_id AND t1.type = 'full'
-      LEFT JOIN tickets t2 ON e.id = t2.event_id AND t2.type = 'concession'
-      LEFT JOIN (
-        SELECT t.event_id, SUM(b.qty) as sold_full
-        FROM bookings b
-        JOIN tickets t ON b.ticket_id = t.id
-        WHERE t.type = 'full'
-        GROUP BY t.event_id
-      ) b1 ON e.id = b1.event_id
-      LEFT JOIN (
-        SELECT t.event_id, SUM(b.qty) as sold_conc
-        FROM bookings b
-        JOIN tickets t ON b.ticket_id = t.id
-        WHERE t.type = 'concession'
-        GROUP BY t.event_id
-      ) b2 ON e.id = b2.event_id
       WHERE e.state = 'published'
-      ORDER BY e.event_date ASC
-    `, (e2, events) => {
-      if (e2) return next(e2);
+      ORDER BY date(e.event_date) ASC
+    `, (err2, events) => {
+      if (err2) return next(err2);
       
       res.render('attendee-home', { 
         settings, 
         events: events || [],
-        errors: [],
-        success: req.query.success,
-        error: req.query.error
+        success: req.query.success
       });
     });
   });
 });
 
-// GET /attendee/events/:id — show individual event details
+// GET /attendee/events/:id - Individual event page for booking
+// Input: Event ID in URL parameters
+// Output: Renders event details with booking form
 router.get('/events/:id', (req, res, next) => {
   const eventId = req.params.id;
   
+  // Get event details
   db.get(`
-    SELECT e.*, 
-           t1.id as full_ticket_id, t1.quantity as full_quantity, t1.price as full_price,
-           t2.id as conc_ticket_id, t2.quantity as conc_quantity, t2.price as conc_price,
-           COALESCE(b1.sold_full, 0) as sold_full,
-           COALESCE(b2.sold_conc, 0) as sold_conc
-    FROM events e
-    LEFT JOIN tickets t1 ON e.id = t1.event_id AND t1.type = 'full'
-    LEFT JOIN tickets t2 ON e.id = t2.event_id AND t2.type = 'concession'
-    LEFT JOIN (
-      SELECT t.event_id, SUM(b.qty) as sold_full
-      FROM bookings b
-      JOIN tickets t ON b.ticket_id = t.id
-      WHERE t.type = 'full'
-      GROUP BY t.event_id
-    ) b1 ON e.id = b1.event_id
-    LEFT JOIN (
-      SELECT t.event_id, SUM(b.qty) as sold_conc
-      FROM bookings b
-      JOIN tickets t ON b.ticket_id = t.id
-      WHERE t.type = 'concession'
-      GROUP BY t.event_id
-    ) b2 ON e.id = b2.event_id
-    WHERE e.id = ? AND e.state = 'published'
-  `, [eventId], (err, event) => {
-    if (err) return next(err);
+    SELECT * FROM events 
+    WHERE id = ? AND state = 'published'
+  `, [eventId], (err1, event) => {
+    if (err1) return next(err1);
     if (!event) return res.status(404).render('404');
     
-    res.render('event-details', { 
-      event,
-      errors: [],
-      success: req.query.success,
-      error: req.query.error
+    // Get tickets for this event with remaining quantities
+    db.all(`
+      SELECT t.id, t.type, t.price, t.quantity,
+             COALESCE(SUM(b.qty), 0) as booked,
+             (t.quantity - COALESCE(SUM(b.qty), 0)) as remaining
+      FROM tickets t
+      LEFT JOIN bookings b ON t.id = b.ticket_id
+      WHERE t.event_id = ?
+      GROUP BY t.id, t.type, t.price, t.quantity
+    `, [eventId], (err2, tickets) => {
+      if (err2) return next(err2);
+      
+      res.render('attendee-event', {
+        event,
+        tickets: tickets || [],
+        errors: []
+      });
     });
   });
 });
 
-// POST /attendee/book — handle ticket booking
-router.post('/book', (req, res, next) => {
-  const { event_id, ticket_type, quantity, buyer_name } = req.body;
-  const errors = [];
-  
-  if (!buyer_name || !buyer_name.trim()) {
-    errors.push('Buyer name is required');
-  }
-  if (!event_id) {
-    errors.push('Event ID is required');
-  }
-  if (!ticket_type || !['full', 'concession'].includes(ticket_type)) {
-    errors.push('Valid ticket type is required');
-  }
-  if (!quantity || quantity < 1) {
-    errors.push('Quantity must be at least 1');
-  }
-
-  if (errors.length > 0) {
-    return res.redirect(`/attendee/events/${event_id}?error=${encodeURIComponent(errors.join(', '))}`);
-  }
-
-  db.get(`
-    SELECT t.*, e.title as event_title,
-           COALESCE(SUM(b.qty), 0) as sold_tickets
-    FROM tickets t
-    JOIN events e ON t.event_id = e.id
-    LEFT JOIN bookings b ON t.id = b.ticket_id
-    WHERE t.event_id = ? AND t.type = ?
-    GROUP BY t.id
-  `, [event_id, ticket_type], (err, ticket) => {
-    if (err) return next(err);
-    if (!ticket) {
-      return res.redirect(`/attendee/events/${event_id}?error=${encodeURIComponent('Ticket type not found')}`);
+// POST /attendee/events/:id/book - Book tickets for an event
+// Input: Event ID and booking form data {buyer_name, ticket quantities}
+// Output: Creates booking records and redirects to success page
+router.post('/events/:id/book',
+  [
+    body('buyer_name').notEmpty().withMessage('Your name is required'),
+    body('full_quantity').optional().isInt({ min: 0 }).withMessage('Full ticket quantity must be 0 or more'),
+    body('conc_quantity').optional().isInt({ min: 0 }).withMessage('Concession ticket quantity must be 0 or more')
+  ],
+  (req, res, next) => {
+    const eventId = req.params.id;
+    const errors = validationResult(req);
+    const { buyer_name, full_quantity = 0, conc_quantity = 0 } = req.body;
+    
+    // Check if at least one ticket is being booked
+    if (parseInt(full_quantity) === 0 && parseInt(conc_quantity) === 0) {
+      errors.errors.push({ msg: 'Please select at least one ticket' });
     }
-
-    const availableTickets = ticket.quantity - ticket.sold_tickets;
-    if (quantity > availableTickets) {
-      return res.redirect(`/attendee/events/${event_id}?error=${encodeURIComponent('Not enough tickets available')}`);
-    }
-
-    db.run(`
-      INSERT INTO bookings (event_id, ticket_id, buyer_name, qty, booked_at)
-      VALUES (?, ?, ?, ?, datetime('now'))
-    `, [event_id, ticket.id, buyer_name.trim(), quantity], function(err) {
-      if (err) return next(err);
-      
-      res.redirect(`/attendee?success=${encodeURIComponent('Booking successful! Your tickets have been reserved.')}`);
-    });
-  });
-});
-
-// GET /attendee/dashboard — Attendee Analytics Dashboard
-router.get('/dashboard', (req, res, next) => {
-  const queries = {
-    myBookingsByEvent: `
-      SELECT e.title AS event_name, 
-             t.type AS ticket_type,
-             SUM(b.qty) AS tickets_booked,
-             SUM(b.qty * t.price) AS amount_spent,
-             e.event_date
-      FROM bookings b
-      JOIN tickets t ON t.id = b.ticket_id
-      JOIN events e ON e.id = t.event_id
-      GROUP BY e.id, e.title, t.type, e.event_date
-      ORDER BY e.event_date ASC
-    `,
     
-    myBookingsByType: `
-      SELECT t.type AS label,
-             COUNT(b.id) AS booking_count,
-             SUM(b.qty) AS total_tickets,
-             SUM(b.qty * t.price) AS total_spent
-      FROM bookings b
-      JOIN tickets t ON t.id = b.ticket_id
-      GROUP BY t.type
-    `,
-    
-    bookingTimeline: `
-      SELECT DATE(b.booked_at) AS booking_date,
-             COUNT(b.id) AS bookings_made,
-             SUM(b.qty) AS tickets_purchased,
-             SUM(b.qty * t.price) AS daily_spending
-      FROM bookings b
-      JOIN tickets t ON t.id = b.ticket_id
-      GROUP BY DATE(b.booked_at)
-      ORDER BY booking_date ASC
-    `,
-    
-    upcomingEvents: `
-      SELECT DISTINCT e.title, e.event_date, e.description,
-             SUM(b.qty) AS my_tickets
-      FROM bookings b
-      JOIN tickets t ON t.id = b.ticket_id
-      JOIN events e ON e.id = t.event_id
-      WHERE datetime(e.event_date) > datetime('now')
-      GROUP BY e.id, e.title, e.event_date, e.description
-      ORDER BY e.event_date ASC
-    `,
-    
-    spendingSummary: `
-      SELECT 
-        COUNT(DISTINCT b.id) AS total_bookings,
-        SUM(b.qty) AS total_tickets,
-        SUM(b.qty * t.price) AS total_spent,
-        COUNT(DISTINCT e.id) AS events_attended,
-        AVG(b.qty * t.price) AS avg_booking_value
-      FROM bookings b
-      JOIN tickets t ON t.id = b.ticket_id
-      JOIN events e ON e.id = t.event_id
-    `
-  };
-
-  let completedQueries = 0;
-  const results = {};
-  const totalQueries = Object.keys(queries).length;
-
-  Object.entries(queries).forEach(([key, query]) => {
-    db.all(query, (err, rows) => {
-      if (err) return next(err);
-      
-      results[key] = rows || [];
-      completedQueries++;
-      
-      if (completedQueries === totalQueries) {
-        const summary = results.spendingSummary[0] || {
-          total_bookings: 0,
-          total_tickets: 0,
-          total_spent: 0,
-          events_attended: 0,
-          avg_booking_value: 0
-        };
-
-        res.render('attendee-dashboard', {
-          ...results,
-          summary
+    if (!errors.isEmpty()) {
+      // Reload page with errors - need to get event and tickets again
+      db.get('SELECT * FROM events WHERE id = ? AND state = "published"', [eventId], (err1, event) => {
+        if (err1) return next(err1);
+        
+        db.all(`
+          SELECT t.id, t.type, t.price, t.quantity,
+                 COALESCE(SUM(b.qty), 0) as booked,
+                 (t.quantity - COALESCE(SUM(b.qty), 0)) as remaining
+          FROM tickets t
+          LEFT JOIN bookings b ON t.id = b.ticket_id
+          WHERE t.event_id = ?
+          GROUP BY t.id, t.type, t.price, t.quantity
+        `, [eventId], (err2, tickets) => {
+          if (err2) return next(err2);
+          
+          res.render('attendee-event', {
+            event,
+            tickets,
+            errors: errors.array(),
+            formData: req.body
+          });
         });
-      }
+      });
+      return;
+    }
+    
+    // Process bookings
+    let bookingsToProcess = [];
+    
+    if (parseInt(full_quantity) > 0) {
+      bookingsToProcess.push({ type: 'full', quantity: parseInt(full_quantity) });
+    }
+    
+    if (parseInt(conc_quantity) > 0) {
+      bookingsToProcess.push({ type: 'concession', quantity: parseInt(conc_quantity) });
+    }
+    
+    // Check availability and create bookings
+    let processedBookings = 0;
+    const totalBookings = bookingsToProcess.length;
+    
+    if (totalBookings === 0) {
+      return res.redirect(`/attendee/events/${eventId}`);
+    }
+    
+    bookingsToProcess.forEach(booking => {
+      // Get ticket ID and check availability
+      db.get(`
+        SELECT t.id, t.quantity,
+               COALESCE(SUM(b.qty), 0) as booked,
+               (t.quantity - COALESCE(SUM(b.qty), 0)) as remaining
+        FROM tickets t
+        LEFT JOIN bookings b ON t.id = b.ticket_id
+        WHERE t.event_id = ? AND t.type = ?
+        GROUP BY t.id, t.quantity
+      `, [eventId, booking.type], (err, ticket) => {
+        if (err) return next(err);
+        
+        if (!ticket || ticket.remaining < booking.quantity) {
+          // Not enough tickets available
+          db.get('SELECT * FROM events WHERE id = ?', [eventId], (err1, event) => {
+            if (err1) return next(err1);
+            
+            db.all(`
+              SELECT t.id, t.type, t.price, t.quantity,
+                     COALESCE(SUM(b.qty), 0) as booked,
+                     (t.quantity - COALESCE(SUM(b.qty), 0)) as remaining
+              FROM tickets t
+              LEFT JOIN bookings b ON t.id = b.ticket_id
+              WHERE t.event_id = ?
+              GROUP BY t.id, t.type, t.price, t.quantity
+            `, [eventId], (err2, tickets) => {
+              if (err2) return next(err2);
+              
+              res.render('attendee-event', {
+                event,
+                tickets,
+                errors: [{ msg: `Not enough ${booking.type} tickets available` }],
+                formData: req.body
+              });
+            });
+          });
+          return;
+        }
+        
+        // Create booking
+        db.run(`
+          INSERT INTO bookings (event_id, ticket_id, buyer_name, qty)
+          VALUES (?, ?, ?, ?)
+        `, [eventId, ticket.id, buyer_name, booking.quantity], err => {
+          if (err) return next(err);
+          
+          processedBookings++;
+          if (processedBookings === totalBookings) {
+            // All bookings processed successfully
+            res.redirect(`/attendee?success=Booking successful for ${buyer_name}!`);
+          }
+        });
+      });
     });
-  });
-});
-
-// GET /attendee/my-bookings — View personal booking history
-router.get('/my-bookings', (req, res, next) => {
-  db.all(`
-    SELECT b.id, b.buyer_name, b.qty, b.booked_at,
-           e.title AS event_title, e.event_date,
-           t.type AS ticket_type, t.price,
-           (b.qty * t.price) AS total_cost
-    FROM bookings b
-    JOIN events e ON b.event_id = e.id
-    JOIN tickets t ON b.ticket_id = t.id
-    ORDER BY datetime(b.booked_at) DESC
-  `, (err, bookings) => {
-    if (err) return next(err);
-    res.render('my-bookings', { bookings });
-  });
-});
+  }
+);
 
 module.exports = router;
